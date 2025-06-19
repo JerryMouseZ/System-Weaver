@@ -1,19 +1,22 @@
 #!/bin/bash
 # ==============================================================================
-#                 现代化 Zsh & Tmux 终端环境优化配置脚本
+#                 现代化 Zsh & Tmux & Neovim 终端环境优化配置脚本
 #
 # 脚本特性:
 # 1. 模块化设计: 所有功能封装在函数中，清晰易维护。
 # 2. 断点续传: 自动跳过已成功执行的步骤，可从失败处继续。
 # 3. 轻量高效: 移除 Oh-My-Zsh，直接使用 Zinit 管理插件。
 # 4. Python 工具链: 使用新兴的高性能包管理器 uv。
-# 5. 自动化配置:
+# 5. 现代化编辑器: 安装最新版 Neovim 和 AstroNvim 配置。
+# 6. 自动化配置:
 #    - 安装核心依赖与工具 (Zsh, Tmux, Git, Starship, colorls, uv 等)。
 #    - 安装 FiraCode Nerd Font 字体。
+#    - 安装 Neovim (AppImage) 和 AstroNvim 配置。
+#    - 安装 AstroNvim 依赖工具 (ripgrep, lazygit, tree-sitter 等)。
 #    - 自动生成 .zshrc, .tmux.conf, 和 starship.toml 配置文件。
 #    - 设置 Zsh 为默认 Shell。
 #
-# @version: 4.0 (Optimized Version)
+# @version: 5.0 (Neovim + AstroNvim Edition)
 # ==============================================================================
 
 # --- 安全设置 ---
@@ -174,7 +177,119 @@ install_core_tools() {
     fi
 }
 
-# 步骤 5: 安装语言环境管理器
+# 步骤 5: 安装 Neovim (使用 AppImage)
+install_neovim() {
+    print_info "安装 Neovim (最新版本)..."
+    local nvim_dir="$HOME/.local/bin"
+    local nvim_appimage="$nvim_dir/nvim.appimage"
+    local nvim_symlink="$nvim_dir/nvim"
+
+    # 创建本地 bin 目录
+    mkdir -p "$nvim_dir"
+
+    # 检查是否已安装且版本符合要求
+    if [ -f "$nvim_symlink" ] && "$nvim_symlink" --version | grep -q "NVIM v0\.\(1[0-9]\|[2-9][0-9]\)"; then
+        print_info "Neovim 已安装且版本符合要求。"
+        return 0
+    fi
+
+    # 下载最新的 Neovim AppImage
+    print_info "下载 Neovim AppImage..."
+    wget -O "$nvim_appimage" https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.appimage || return 1
+
+    # 设置执行权限
+    chmod +x "$nvim_appimage"
+
+    # 创建符号链接
+    ln -sf "$nvim_appimage" "$nvim_symlink"
+
+    # 确保 ~/.local/bin 在 PATH 中 (通过 .zshrc 配置)
+    print_success "Neovim 安装完成。"
+}
+
+# 步骤 6: 安装 AstroNvim 依赖工具
+install_astronvim_dependencies() {
+    print_info "安装 AstroNvim 依赖工具..."
+
+    # 安装 ripgrep (用于文件搜索)
+    print_info "安装 ripgrep..."
+    if ! command -v rg &> /dev/null; then
+        sudo apt-get install -y ripgrep || return 1
+    else
+        print_info "ripgrep 已安装。"
+    fi
+
+    # 安装 Tree-sitter CLI
+    print_info "安装 Tree-sitter CLI..."
+    if ! command -v tree-sitter &> /dev/null; then
+        # 使用 npm 安装 tree-sitter-cli (需要先确保 Node.js 可用)
+        if command -v npm &> /dev/null; then
+            sudo npm install -g tree-sitter-cli
+        else
+            print_warning "Node.js 未安装，跳过 Tree-sitter CLI 安装。可在安装 Node.js 后手动安装。"
+        fi
+    else
+        print_info "Tree-sitter CLI 已安装。"
+    fi
+
+    # 安装 lazygit (Git UI)
+    print_info "安装 lazygit..."
+    if ! command -v lazygit &> /dev/null; then
+        local lazygit_version=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po '"tag_name": "v\K[^"]*')
+        curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${lazygit_version}_Linux_x86_64.tar.gz"
+        tar xf lazygit.tar.gz lazygit
+        sudo install lazygit /usr/local/bin
+        rm lazygit lazygit.tar.gz
+    else
+        print_info "lazygit 已安装。"
+    fi
+
+    # 安装 gdu (磁盘使用分析器)
+    print_info "安装 gdu..."
+    if ! command -v gdu &> /dev/null; then
+        sudo apt-get install -y gdu || print_warning "gdu 安装失败，可能在某些 Ubuntu 版本中不可用。"
+    else
+        print_info "gdu 已安装。"
+    fi
+
+    # 安装 bottom (进程查看器)
+    print_info "安装 bottom..."
+    if ! command -v btm &> /dev/null; then
+        sudo apt-get install -y bottom || print_warning "bottom 安装失败，可能在某些 Ubuntu 版本中不可用。"
+    else
+        print_info "bottom 已安装。"
+    fi
+}
+
+# 步骤 7: 安装 AstroNvim
+install_astronvim() {
+    print_info "安装 AstroNvim..."
+
+    # 备份现有的 Neovim 配置
+    if [ -d "$HOME/.config/nvim" ]; then
+        print_info "备份现有的 Neovim 配置..."
+        local backup_dir="$HOME/.config/nvim.bak.$(date +%Y%m%d_%H%M%S)"
+        mv "$HOME/.config/nvim" "$backup_dir"
+        print_info "现有配置已备份到: $backup_dir"
+    fi
+
+    # 清理 Neovim 相关目录 (可选但推荐)
+    print_info "清理 Neovim 数据目录..."
+    [ -d "$HOME/.local/share/nvim" ] && mv "$HOME/.local/share/nvim" "$HOME/.local/share/nvim.bak.$(date +%Y%m%d_%H%M%S)"
+    [ -d "$HOME/.local/state/nvim" ] && mv "$HOME/.local/state/nvim" "$HOME/.local/state/nvim.bak.$(date +%Y%m%d_%H%M%S)"
+    [ -d "$HOME/.cache/nvim" ] && mv "$HOME/.cache/nvim" "$HOME/.cache/nvim.bak.$(date +%Y%m%d_%H%M%S)"
+
+    # 克隆 AstroNvim 模板
+    print_info "克隆 AstroNvim 模板..."
+    git clone --depth 1 https://github.com/AstroNvim/template ~/.config/nvim || return 1
+
+    # 移除模板的 git 连接
+    rm -rf ~/.config/nvim/.git
+
+    print_success "AstroNvim 安装完成！"
+}
+
+# 步骤 8: 安装语言环境管理器
 install_language_managers() {
     # Rustup
     print_info "安装 Rust..."
@@ -193,12 +308,16 @@ install_language_managers() {
     fi
 }
 
-# 步骤 6.1: 生成 .zshrc 配置文件
+# 步骤 9.1: 生成 .zshrc 配置文件
 configure_zsh() {
     print_info "创建 .zshrc 配置文件..."
     # shellcheck source=/dev/null
     cat > "$HOME/.zshrc" << 'EOF'
 # ~/.zshrc (Optimized, without Oh-My-Zsh)
+
+### PATH Configuration
+# 添加本地 bin 目录到 PATH (用于 Neovim 等工具)
+export PATH="$HOME/.local/bin:$PATH"
 
 ### Zinit 插件管理器
 # 加载 Zinit
@@ -233,6 +352,112 @@ alias ll='eza -l --icons'
 alias la='eza -la --icons'
 alias tree='eza --tree --icons'
 
+appimage2desktop() {
+    # 检查参数
+    if [ $# -lt 1 ]; then
+        echo "用法: appimage2desktop <AppImage文件路径> [图标路径] [-n|--no-sandbox]"
+        return 1
+    fi
+    
+    # 默认不使用 --no-sandbox
+    USE_NO_SANDBOX=false
+    
+    # 处理参数
+    APPIMAGE_PATH=""
+    ICON_PATH=""
+    
+    # 解析参数
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -n|--no-sandbox)
+                USE_NO_SANDBOX=true
+                shift
+                ;;
+            *)
+                if [ -z "$APPIMAGE_PATH" ]; then
+                    APPIMAGE_PATH=$(realpath "$1")
+                elif [ -z "$ICON_PATH" ] && [ -f "$1" ]; then
+                    ICON_PATH=$(realpath "$1")
+                fi
+                shift
+                ;;
+        esac
+    done
+    
+    # 检查是否提供了AppImage路径
+    if [ -z "$APPIMAGE_PATH" ]; then
+        echo "错误: 未提供AppImage文件路径"
+        return 1
+    fi
+    
+    # 检查文件是否存在
+    if [ ! -f "$APPIMAGE_PATH" ]; then
+        echo "错误: 文件 '$APPIMAGE_PATH' 不存在"
+        return 1
+    fi
+    
+    # 检查是否是AppImage文件
+    if [[ ! "$APPIMAGE_PATH" =~ \.AppImage$ ]]; then
+        echo "警告: 文件 '$1' 可能不是AppImage文件，但仍将继续"
+    fi
+    
+    # 确保文件可执行
+    chmod +x "$APPIMAGE_PATH"
+    
+    # 获取应用名称（去掉路径和扩展名）
+    APP_NAME=$(basename "$APPIMAGE_PATH" .AppImage)
+    
+    # 询问用户应用名称
+    echo -n "应用名称 [$APP_NAME]: "
+    read USER_APP_NAME
+    if [ -n "$USER_APP_NAME" ]; then
+        APP_NAME="$USER_APP_NAME"
+    fi
+    
+    # 如果没有设置图标路径
+    if [ -z "$ICON_PATH" ]; then
+        echo "未提供有效的图标路径，将使用默认图标"
+    fi
+    
+    # 创建应用目录（如果不存在）
+    mkdir -p ~/.local/share/applications
+    
+    # 创建desktop文件
+    DESKTOP_FILE="$HOME/.local/share/applications/${APP_NAME}.desktop"
+    
+    echo "[Desktop Entry]" > "$DESKTOP_FILE"
+    echo "Version=1.0" >> "$DESKTOP_FILE"
+    echo "Type=Application" >> "$DESKTOP_FILE"
+    echo "Name=$APP_NAME" >> "$DESKTOP_FILE"
+    echo "Comment=$APP_NAME" >> "$DESKTOP_FILE"
+    # 根据是否使用 --no-sandbox 添加不同的执行命令
+    if [ "$USE_NO_SANDBOX" = true ]; then
+        echo "Exec=\"$APPIMAGE_PATH\" --no-sandbox" >> "$DESKTOP_FILE"
+        echo "添加了 --no-sandbox 参数到启动命令"
+    else
+        echo "Exec=\"$APPIMAGE_PATH\"" >> "$DESKTOP_FILE"
+    fi
+    echo "Terminal=false" >> "$DESKTOP_FILE"
+    echo "Categories=Utility;" >> "$DESKTOP_FILE"
+    
+    # 如果有图标则添加
+    if [ -n "$ICON_PATH" ]; then
+        echo "Icon=$ICON_PATH" >> "$DESKTOP_FILE"
+    fi
+    
+    # 设置权限
+    chmod +x "$DESKTOP_FILE"
+    
+    echo "桌面快捷方式已创建: $DESKTOP_FILE"
+    
+    # 更新桌面数据库
+    update-desktop-database ~/.local/share/applications 2>/dev/null || true
+    
+    return 0
+}
+alias a2d=appimage2desktop
+
+
 ### Language Environment Managers
 
 # NVM (Node.js)
@@ -258,7 +483,7 @@ eval "$(starship init zsh)"
 EOF
 }
 
-# 步骤 6.2: 生成 starship.toml 配置文件
+# 步骤 9.2: 生成 starship.toml 配置文件
 configure_starship() {
     print_info "使用 preset 'pastel-powerline' 创建 starship.toml..."
     mkdir -p "$HOME/.config"
@@ -266,7 +491,7 @@ configure_starship() {
     starship preset pastel-powerline -o "$HOME/.config/starship.toml"
 }
 
-# 步骤 6.3: 生成 .tmux.conf 配置文件
+# 步骤 9.3: 生成 .tmux.conf 配置文件
 configure_tmux() {
     print_info "创建 .tmux.conf 配置文件..."
     cat > "$HOME/.tmux.conf" << 'EOF'
@@ -356,7 +581,7 @@ run '~/.tmux/plugins/tpm/tpm'
 EOF
 }
 
-# 步骤 7: 设置默认 Shell
+# 步骤 10: 设置默认 Shell
 set_default_shell() {
     print_info "设置 Zsh 为默认 Shell..."
     if [ "$(basename "$SHELL")" != "zsh" ]; then
@@ -398,7 +623,16 @@ print_final_instructions() {
     echo -e "\n\e[1;32m5. 安装 Node.js 版本 (可选):\e[0m"
     echo   "   - 安装最新的 LTS 版本的 Node.js: \e[1;36mnvm install --lts\e[0m"
 
-    echo -e "\n享受你全新的、强大的终端环境吧！"
+    echo -e "\n\e[1;32m6. 配置 Neovim 和 AstroNvim:\e[0m"
+    echo   "   - 启动 Neovim: \e[1;36mnvim\e[0m"
+    echo   "   - 首次启动时，AstroNvim 会自动安装插件，请耐心等待"
+    echo   "   - 安装语言服务器: \e[1;36m:LspInstall <language>\e[0m (例如: \e[1;36m:LspInstall pyright\e[0m)"
+    echo   "   - 安装语言解析器: \e[1;36m:TSInstall <language>\e[0m (例如: \e[1;36m:TSInstall python\e[0m)"
+    echo   "   - 安装调试器: \e[1;36m:DapInstall <debugger>\e[0m (例如: \e[1;36m:DapInstall python\e[0m)"
+    echo   "   - 更新插件: \e[1;36m:Lazy update\e[0m 或使用快捷键 \e[1;33m<Leader>pU\e[0m"
+    echo   "   - 检查 AstroNvim 状态: \e[1;36m:AstroVersion\e[0m"
+
+    echo -e "\n享受你全新的、强大的终端环境和现代化的 Neovim 编辑器吧！"
 }
 
 
@@ -409,6 +643,9 @@ main() {
     run_step "nerd_font" install_nerd_font
     run_step "backup_configs" backup_configs
     run_step "core_tools" install_core_tools
+    run_step "neovim" install_neovim
+    run_step "astronvim_dependencies" install_astronvim_dependencies
+    run_step "astronvim" install_astronvim
     run_step "language_managers" install_language_managers
     run_step "configure_zsh" configure_zsh
     run_step "configure_starship" configure_starship
