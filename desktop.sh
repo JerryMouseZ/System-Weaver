@@ -172,10 +172,6 @@ install_flatpak_applications() {
         apt-get install -y flatpak || return 1
     fi
 
-    # 添加 Flathub 软件源 (Flatpak 应用的主要来源)
-    print_info "添加 Flathub 软件源..."
-    flatpak remote-add-if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo || return 1
-
     # 定义要安装的应用列表
     local flatpak_apps=(
         "cn.feishu.Feishu"                                    # 飞书
