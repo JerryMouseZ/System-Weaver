@@ -346,6 +346,27 @@ if [[ -f $HOME/.local/share/zinit/zinit.git/zinit.zsh ]]; then
 fi
 ### End of Zinit chunk
 
+### History Configuration
+# 设置历史记录文件的路径
+HISTFILE=~/.zsh_history
+# 设置在内存中保留的历史记录条数
+HISTSIZE=10000
+# 设置在历史记录文件中保存的条数
+SAVEHIST=10000
+
+# --- Zsh 历史记录优化选项 ---
+# 在历史记录中忽略重复的命令，只保留最新的一个
+setopt HIST_IGNORE_ALL_DUPS
+# 当历史记录文件被清空时，优先删除旧的重复条目
+setopt HIST_EXPIRE_DUPS_FIRST
+# 不记录以空格开头的命令 (用于临时或敏感命令)
+setopt HIST_IGNORE_SPACE
+# 在命令历史中删除多余的空格
+setopt HIST_REDUCE_BLANKS
+# 在不同的终端会话之间即时共享历史记录
+setopt INC_APPEND_HISTORY
+setopt SHARE_HISTORY
+
 ### Aliases
 alias ls='eza --icons'
 alias ll='eza -l --icons'
