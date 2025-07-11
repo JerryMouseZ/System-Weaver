@@ -211,51 +211,7 @@ install_flatpak_applications() {
     print_success "Flatpak 应用安装和权限配置完成。"
 }
 
-# 步骤 5: 安装并配置 Docker
-install_docker() {
-    print_info "安装并配置 Docker..."
-
-    # 安装 Docker
-    if ! command -v docker &> /dev/null; then
-        print_info "Docker 未安装，执行安装..."
-        apt-get update || return 1
-        apt-get install -y docker.io || return 1
-    else
-        print_info "Docker 已安装。"
-    fi
-
-    # 创建 Docker 数据目录
-    print_info "创建 Docker 数据目录 /home/docker..."
-    mkdir -p /home/docker
-    chown root:root /home/docker
-
-    # 配置 Docker 数据根目录
-    local daemon_file="/etc/docker/daemon.json"
-    if [ -f "$daemon_file" ]; then
-        print_info "备份现有 Docker 配置文件..."
-        cp "$daemon_file" "${daemon_file}.bak"
-    fi
-    cat > "$daemon_file" <<EOF
-{
-    "data-root": "/home/docker"
-}
-EOF
-
-    # 重启 Docker 服务
-    print_info "重启 Docker 服务..."
-    systemctl enable docker
-    systemctl restart docker
-
-    # 将原始用户加入 docker 组，允许免 sudo 运行 docker
-    print_info "将用户 $ORIGINAL_USER 添加到 docker 组..."
-    groupadd docker 2>/dev/null || true
-    usermod -aG docker "$ORIGINAL_USER"
-    print_success "用户 $ORIGINAL_USER 已添加到 docker 组。"
-
-    print_success "Docker 已安装并配置，数据存储路径为 /home/docker。"
-}
-
-# 步骤 6: 安装开发工具 (VS Code)
+# 步骤 5: 安装开发工具 (VS Code)
 install_development_tools() {
     print_info "安装开发工具..."
 
@@ -320,7 +276,6 @@ main() {
     run_step "google_chrome" install_google_chrome
     run_step "flatpak_apps" install_flatpak_applications
     run_step "development_tools" install_development_tools
-    run_step "docker" install_docker
     print_final_instructions
 }
 

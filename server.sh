@@ -308,7 +308,51 @@ install_language_managers() {
     fi
 }
 
-# 步骤 9.1: 生成 .zshrc 配置文件
+# 步骤 9: 安装并配置 Docker
+install_docker() {
+    print_info "安装并配置 Docker..."
+
+    # 安装 Docker
+    if ! command -v docker &> /dev/null; then
+        print_info "Docker 未安装，执行安装..."
+        sudo apt-get update || return 1
+        sudo apt-get install -y docker.io || return 1
+    else
+        print_info "Docker 已安装。"
+    fi
+
+    # 创建 Docker 数据目录
+    print_info "创建 Docker 数据目录 /home/docker..."
+    sudo mkdir -p /home/docker
+    sudo chown root:root /home/docker
+
+    # 配置 Docker 数据根目录
+    local daemon_file="/etc/docker/daemon.json"
+    if [ -f "$daemon_file" ]; then
+        print_info "备份现有 Docker 配置文件..."
+        sudo cp "$daemon_file" "${daemon_file}.bak"
+    fi
+    sudo tee "$daemon_file" > /dev/null <<EOF
+{
+    "data-root": "/home/docker"
+}
+EOF
+
+    # 重启 Docker 服务
+    print_info "重启 Docker 服务..."
+    sudo systemctl enable docker
+    sudo systemctl restart docker
+
+    # 将当前用户加入 docker 组，允许免 sudo 运行 docker
+    print_info "将用户 $USER 添加到 docker 组..."
+    sudo groupadd docker 2>/dev/null || true
+    sudo usermod -aG docker "$USER"
+    print_success "用户 $USER 已添加到 docker 组。"
+
+    print_success "Docker 已安装并配置，数据存储路径为 /home/docker。"
+}
+
+# 步骤 10.1: 生成 .zshrc 配置文件
 configure_zsh() {
     print_info "创建 .zshrc 配置文件..."
     # shellcheck source=/dev/null
@@ -504,7 +548,7 @@ eval "$(starship init zsh)"
 EOF
 }
 
-# 步骤 9.2: 生成 starship.toml 配置文件
+# 步骤 10.2: 生成 starship.toml 配置文件
 configure_starship() {
     print_info "使用 preset 'pastel-powerline' 创建 starship.toml..."
     mkdir -p "$HOME/.config"
@@ -512,7 +556,7 @@ configure_starship() {
     starship preset pastel-powerline -o "$HOME/.config/starship.toml"
 }
 
-# 步骤 9.3: 生成 .tmux.conf 配置文件
+# 步骤 10.3: 生成 .tmux.conf 配置文件
 configure_tmux() {
     print_info "创建 .tmux.conf 配置文件..."
     cat > "$HOME/.tmux.conf" << 'EOF'
@@ -602,7 +646,7 @@ run '~/.tmux/plugins/tpm/tpm'
 EOF
 }
 
-# 步骤 10: 设置默认 Shell
+# 步骤 11: 设置默认 Shell
 set_default_shell() {
     print_info "设置 Zsh 为默认 Shell..."
     if [ "$(basename "$SHELL")" != "zsh" ]; then
@@ -668,6 +712,7 @@ main() {
     run_step "astronvim_dependencies" install_astronvim_dependencies
     run_step "astronvim" install_astronvim
     run_step "language_managers" install_language_managers
+    run_step "docker" install_docker
     run_step "configure_zsh" configure_zsh
     run_step "configure_starship" configure_starship
     run_step "configure_tmux" configure_tmux
