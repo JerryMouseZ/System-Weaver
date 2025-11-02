@@ -23,7 +23,7 @@
 - **强大编辑器**: Neovim v0.11+ + AstroNvim 配置，支持 LSP、调试、插件管理
 - **开发工具链**:
   - 语言管理器: NVM (Node.js)、Rustup (Rust)、uv (Python)
-  - 系统工具: ripgrep、lazygit、gdu、bottom、Tree-sitter
+  - 系统工具: ripgrep、fzf、lazygit、gdu、bottom、Tree-sitter
   - 字体支持: FiraCode Nerd Font 自动安装
 - **自动配置**: 生成优化的 `.zshrc`、`.tmux.conf`、`starship.toml` 配置文件
 
@@ -73,12 +73,14 @@ sudo ./desktop.sh
 3. **字体安装** - 下载安装 FiraCode Nerd Font
 4. **配置备份** - 自动备份现有的 shell 和 tmux 配置
 5. **核心工具** - 安装 Zinit、Starship、colorls、TPM、uv
-6. **Neovim 安装** - 下载最新 Neovim AppImage (v0.11+)
-7. **AstroNvim 依赖** - 安装 ripgrep、lazygit、tree-sitter、gdu、bottom
-8. **AstroNvim 配置** - 克隆官方模板，配置开发环境
-9. **语言管理器** - 安装 NVM (Node.js)、Rustup (Rust)
-10. **配置生成** - 创建 .zshrc、.tmux.conf、starship.toml
-11. **Shell 设置** - 将 Zsh 设为默认 Shell
+6. **fzf 安装** - 安装 fzf 模糊查找工具及键位绑定
+7. **Neovim 安装** - 下载最新 Neovim AppImage (v0.11+)
+8. **AstroNvim 依赖** - 安装 ripgrep、lazygit、tree-sitter、gdu、bottom
+9. **AstroNvim 配置** - 克隆官方模板，配置开发环境
+10. **语言管理器** - 安装 NVM (Node.js)、Rustup (Rust)
+11. **Docker 配置** - 安装并配置 Docker，数据根目录设置为 /home/docker
+12. **配置生成** - 创建 .zshrc、.tmux.conf、starship.toml
+13. **Shell 设置** - 将 Zsh 设为默认 Shell
 
 ### 🖥️ desktop.sh 执行步骤
 1. **环境初始化** - 检查权限，创建状态目录
@@ -129,8 +131,10 @@ sudo ./desktop.sh
 - **终端复用**: Tmux + 插件生态
 - **编辑器**: Neovim v0.11+ + AstroNvim
 - **提示符**: Starship (pastel-powerline 主题)
-- **开发工具**: ripgrep、lazygit、gdu、bottom
+- **搜索工具**: fzf (模糊查找)、ripgrep (内容搜索)
+- **开发工具**: lazygit、gdu、bottom
 - **语言环境**: NVM、Rustup、uv
+- **容器工具**: Docker
 - **字体**: FiraCode Nerd Font
 
 ### 🖥️ 桌面应用 (desktop.sh)
@@ -151,6 +155,12 @@ sudo ./desktop.sh
 z <目录名>              # 快速跳转到常用目录
 ll                     # 带图标的详细文件列表
 tree                   # 树形目录结构
+
+# fzf 模糊查找 (按键绑定)
+Ctrl+T                 # 模糊搜索文件并粘贴到命令行
+Ctrl+R                 # 模糊搜索历史命令
+Alt+C                  # 模糊搜索并跳转到目录
+fcd                    # 使用 fzf 快速跳转到子目录
 
 # Tmux 操作 (前缀键: Ctrl+a)
 Ctrl+a + |            # 水平分割窗格

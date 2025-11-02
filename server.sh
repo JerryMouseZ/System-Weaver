@@ -167,7 +167,7 @@ install_core_tools() {
     else
         print_info "TPM 已安装。"
     fi
-    
+
     # uv (Python 包管理器)
     print_info "安装 uv..."
     if ! command -v uv &> /dev/null; then
@@ -175,6 +175,26 @@ install_core_tools() {
     else
         print_info "uv 已安装。"
     fi
+}
+
+# 步骤 4.5: 安装 fzf (模糊查找工具)
+install_fzf() {
+    print_info "安装 fzf (模糊查找工具)..."
+    local fzf_dir="$HOME/.fzf"
+
+    if [ -d "$fzf_dir" ]; then
+        print_info "fzf 已安装。"
+        return 0
+    fi
+
+    # 克隆 fzf 仓库
+    git clone --depth 1 https://github.com/junegunn/fzf.git "$fzf_dir" || return 1
+
+    # 运行安装脚本 (启用 bash/zsh 集成和自动补全，不更新 shell 配置文件)
+    # 我们会在 configure_zsh 中手动添加配置
+    "$fzf_dir/install" --key-bindings --completion --no-update-rc || return 1
+
+    print_success "fzf 安装完成。"
 }
 
 # 步骤 5: 安装 Neovim (使用 AppImage)
@@ -416,6 +436,49 @@ alias ls='eza --icons'
 alias ll='eza -l --icons'
 alias la='eza -la --icons'
 alias tree='eza --tree --icons'
+
+### fzf Configuration
+# fzf 键位绑定和自动补全
+if [ -f ~/.fzf.zsh ]; then
+  source ~/.fzf.zsh
+fi
+
+# fzf 配置选项
+export FZF_DEFAULT_OPTS="
+  --height 40%
+  --layout=reverse
+  --border
+  --inline-info
+  --color=fg:#d0d0d0,bg:#121212,hl:#5f87af
+  --color=fg+:#d0d0d0,bg+:#262626,hl+:#5fd7ff
+  --color=info:#afaf87,prompt:#d7005f,pointer:#af5fff
+  --color=marker:#87ff00,spinner:#af5fff,header:#87afaf
+"
+
+# 如果安装了 ripgrep，使用 rg 作为默认搜索工具
+if command -v rg &> /dev/null; then
+  export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
+  export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+fi
+
+# Alt+C 目录跳转优化
+export FZF_ALT_C_OPTS="--preview 'eza --tree --color=always {} | head -200'"
+
+# Ctrl+R 历史命令搜索优化
+export FZF_CTRL_R_OPTS="
+  --preview 'echo {}' --preview-window up:3:hidden:wrap
+  --bind 'ctrl-/:toggle-preview'
+  --bind 'ctrl-y:execute-silent(echo -n {2..} | pbcopy)+abort'
+  --color header:italic
+  --header 'Press CTRL-Y to copy command into clipboard'
+"
+
+# fzf 快捷函数
+# 用 fzf 快速跳转目录
+fcd() {
+    local dir
+    dir=$(find ${1:-.} -type d 2> /dev/null | fzf +m) && cd "$dir"
+}
 
 appimage2desktop() {
     # 检查参数
@@ -688,7 +751,13 @@ print_final_instructions() {
     echo -e "\n\e[1;32m5. 安装 Node.js 版本 (可选):\e[0m"
     echo   "   - 安装最新的 LTS 版本的 Node.js: \e[1;36mnvm install --lts\e[0m"
 
-    echo -e "\n\e[1;32m6. 配置 Neovim 和 AstroNvim:\e[0m"
+    echo -e "\n\e[1;32m6. 使用 fzf 模糊查找工具:\e[0m"
+    echo   "   - \e[1;33mCtrl+T\e[0m: 模糊搜索文件"
+    echo   "   - \e[1;33mCtrl+R\e[0m: 模糊搜索历史命令"
+    echo   "   - \e[1;33mAlt+C\e[0m: 模糊搜索并跳转目录"
+    echo   "   - \e[1;36mfcd\e[0m: 使用 fzf 快速跳转到子目录"
+
+    echo -e "\n\e[1;32m7. 配置 Neovim 和 AstroNvim:\e[0m"
     echo   "   - 启动 Neovim: \e[1;36mnvim\e[0m"
     echo   "   - 首次启动时，AstroNvim 会自动安装插件，请耐心等待"
     echo   "   - 安装语言服务器: \e[1;36m:LspInstall <language>\e[0m (例如: \e[1;36m:LspInstall pyright\e[0m)"
@@ -708,6 +777,7 @@ main() {
     run_step "nerd_font" install_nerd_font
     run_step "backup_configs" backup_configs
     run_step "core_tools" install_core_tools
+    run_step "fzf" install_fzf
     run_step "neovim" install_neovim
     run_step "astronvim_dependencies" install_astronvim_dependencies
     run_step "astronvim" install_astronvim
