@@ -27,6 +27,8 @@ set -o pipefail
 
 # --- 状态与常量定义 ---
 STATE_DIR="$HOME/.config_setup_state"
+OS_TYPE=""
+ARCH_TYPE=""
 
 # --- 助手函数 ---
 print_info() {
@@ -69,6 +71,35 @@ run_step() {
     fi
 }
 
+# --- 平台检测与包管理 ---
+detect_platform() {
+    OS_TYPE="$(uname -s)"
+    ARCH_TYPE="$(uname -m)"
+}
+
+ensure_homebrew() {
+    if command -v brew &> /dev/null; then
+        return 0
+    fi
+    print_info "Homebrew 未安装，开始安装..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || return 1
+    if [ -x /opt/homebrew/bin/brew ]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [ -x /usr/local/bin/brew ]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+    fi
+}
+
+install_packages() {
+    if [ "$OS_TYPE" = "Darwin" ]; then
+        ensure_homebrew || return 1
+        brew update || true
+        brew install "$@" || return 1
+    else
+        sudo apt-get update && sudo apt-get install -y "$@" || return 1
+    fi
+}
+
 # --- 模块化功能函数 ---
 
 # 步骤 0: 初始化环境
@@ -77,23 +108,40 @@ setup_environment() {
     mkdir -p "$STATE_DIR"
     # 确保在用户主目录下执行
     cd "$HOME" || return 1
+    detect_platform
 }
 
 # 步骤 1: 安装系统依赖
 install_system_dependencies() {
     print_info "更新软件包列表并安装系统依赖..."
-    sudo apt-get update && sudo apt-get install -y \
-        build-essential \
-        pkg-config \
-        libssl-dev \
-        zsh \
-        tmux \
-        git \
-        curl \
-        wget \
-        ruby-full \
-        unzip \
-        fontconfig || return 1
+    if [ "$OS_TYPE" = "Darwin" ]; then
+        install_packages \
+            zsh \
+            tmux \
+            git \
+            curl \
+            wget \
+            ruby \
+            unzip \
+            fontconfig || return 1
+        if ! command -v gcc &> /dev/null; then
+            print_info "安装 Xcode Command Line Tools..."
+            xcode-select --install || true
+        fi
+    else
+        install_packages \
+            build-essential \
+            pkg-config \
+            libssl-dev \
+            zsh \
+            tmux \
+            git \
+            curl \
+            wget \
+            ruby-full \
+            unzip \
+            fontconfig || return 1
+    fi
 }
 
 # 步骤 2: 安装 Nerd Font (FiraCode)
@@ -107,11 +155,17 @@ install_nerd_font() {
         return 0
     fi
 
-    wget https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/FiraCode.zip -O /tmp/FiraCode.zip
-    unzip -o /tmp/FiraCode.zip -d "$font_dir" 'FiraCodeNerdFont-*.ttf'
-    rm /tmp/FiraCode.zip
-    # 更新字体缓存
-    fc-cache -f -v
+    if [ "$OS_TYPE" = "Darwin" ]; then
+        ensure_homebrew || return 1
+        brew tap homebrew/cask-fonts || true
+        brew install --cask font-fira-code-nerd-font || return 1
+    else
+        wget https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/FiraCode.zip -O /tmp/FiraCode.zip
+        unzip -o /tmp/FiraCode.zip -d "$font_dir" 'FiraCodeNerdFont-*.ttf'
+        rm /tmp/FiraCode.zip
+        # 更新字体缓存
+        fc-cache -f -v
+    fi
 }
 
 # 步骤 3: 备份现有配置文件
@@ -155,7 +209,11 @@ install_core_tools() {
     # colorls
     print_info "安装 colorls..."
     if ! gem spec colorls &> /dev/null; then
-        sudo gem install colorls
+        if [ "$OS_TYPE" = "Darwin" ]; then
+            gem install colorls
+        else
+            sudo gem install colorls
+        fi
     else
         print_info "colorls 已安装。"
     fi
@@ -187,12 +245,16 @@ install_fzf() {
         return 0
     fi
 
-    # 克隆 fzf 仓库
-    git clone --depth 1 https://github.com/junegunn/fzf.git "$fzf_dir" || return 1
+    if [ "$OS_TYPE" = "Darwin" ]; then
+        install_packages fzf || return 1
+    else
+        # 克隆 fzf 仓库
+        git clone --depth 1 https://github.com/junegunn/fzf.git "$fzf_dir" || return 1
 
-    # 运行安装脚本 (启用 bash/zsh 集成和自动补全，不更新 shell 配置文件)
-    # 我们会在 configure_zsh 中手动添加配置
-    "$fzf_dir/install" --key-bindings --completion --no-update-rc || return 1
+        # 运行安装脚本 (启用 bash/zsh 集成和自动补全，不更新 shell 配置文件)
+        # 我们会在 configure_zsh 中手动添加配置
+        "$fzf_dir/install" --key-bindings --completion --no-update-rc || return 1
+    fi
 
     print_success "fzf 安装完成。"
 }
@@ -208,20 +270,32 @@ install_neovim() {
     mkdir -p "$nvim_dir"
 
     # 检查是否已安装且版本符合要求
-    if [ -f "$nvim_symlink" ] && "$nvim_symlink" --version | grep -q "NVIM v0\.\(1[0-9]\|[2-9][0-9]\)"; then
-        print_info "Neovim 已安装且版本符合要求。"
-        return 0
+    if [ "$OS_TYPE" = "Darwin" ]; then
+        if command -v nvim &> /dev/null && nvim --version | grep -q "NVIM v0\.\(1[0-9]\|[2-9][0-9]\)"; then
+            print_info "Neovim 已安装且版本符合要求。"
+            return 0
+        fi
+    else
+        if [ -f "$nvim_symlink" ] && "$nvim_symlink" --version | grep -q "NVIM v0\.\(1[0-9]\|[2-9][0-9]\)"; then
+            print_info "Neovim 已安装且版本符合要求。"
+            return 0
+        fi
     fi
 
-    # 下载最新的 Neovim AppImage
-    print_info "下载 Neovim AppImage..."
-    wget -O "$nvim_appimage" https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.appimage || return 1
+    if [ "$OS_TYPE" = "Darwin" ]; then
+        ensure_homebrew || return 1
+        brew install neovim || return 1
+    else
+        # 下载最新的 Neovim AppImage
+        print_info "下载 Neovim AppImage..."
+        wget -O "$nvim_appimage" https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.appimage || return 1
 
-    # 设置执行权限
-    chmod +x "$nvim_appimage"
+        # 设置执行权限
+        chmod +x "$nvim_appimage"
 
-    # 创建符号链接
-    ln -sf "$nvim_appimage" "$nvim_symlink"
+        # 创建符号链接
+        ln -sf "$nvim_appimage" "$nvim_symlink"
+    fi
 
     # 确保 ~/.local/bin 在 PATH 中 (通过 .zshrc 配置)
     print_success "Neovim 安装完成。"
@@ -234,7 +308,7 @@ install_astronvim_dependencies() {
     # 安装 ripgrep (用于文件搜索)
     print_info "安装 ripgrep..."
     if ! command -v rg &> /dev/null; then
-        sudo apt-get install -y ripgrep || return 1
+        install_packages ripgrep || return 1
     else
         print_info "ripgrep 已安装。"
     fi
@@ -255,11 +329,15 @@ install_astronvim_dependencies() {
     # 安装 lazygit (Git UI)
     print_info "安装 lazygit..."
     if ! command -v lazygit &> /dev/null; then
-        local lazygit_version=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po '"tag_name": "v\K[^"]*')
-        curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${lazygit_version}_Linux_x86_64.tar.gz"
-        tar xf lazygit.tar.gz lazygit
-        sudo install lazygit /usr/local/bin
-        rm lazygit lazygit.tar.gz
+        if [ "$OS_TYPE" = "Darwin" ]; then
+            install_packages lazygit || return 1
+        else
+            local lazygit_version=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po '"tag_name": "v\K[^"]*')
+            curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${lazygit_version}_Linux_x86_64.tar.gz"
+            tar xf lazygit.tar.gz lazygit
+            sudo install lazygit /usr/local/bin
+            rm lazygit lazygit.tar.gz
+        fi
     else
         print_info "lazygit 已安装。"
     fi
@@ -267,7 +345,11 @@ install_astronvim_dependencies() {
     # 安装 gdu (磁盘使用分析器)
     print_info "安装 gdu..."
     if ! command -v gdu &> /dev/null; then
-        sudo apt-get install -y gdu || print_warning "gdu 安装失败，可能在某些 Ubuntu 版本中不可用。"
+        if [ "$OS_TYPE" = "Darwin" ]; then
+            install_packages gdu || print_warning "gdu 安装失败，可能在某些 macOS 版本中不可用。"
+        else
+            sudo apt-get install -y gdu || print_warning "gdu 安装失败，可能在某些 Ubuntu 版本中不可用。"
+        fi
     else
         print_info "gdu 已安装。"
     fi
@@ -275,7 +357,11 @@ install_astronvim_dependencies() {
     # 安装 bottom (进程查看器)
     print_info "安装 bottom..."
     if ! command -v btm &> /dev/null; then
-        sudo apt-get install -y bottom || print_warning "bottom 安装失败，可能在某些 Ubuntu 版本中不可用。"
+        if [ "$OS_TYPE" = "Darwin" ]; then
+            install_packages bottom || print_warning "bottom 安装失败，可能在某些 macOS 版本中不可用。"
+        else
+            sudo apt-get install -y bottom || print_warning "bottom 安装失败，可能在某些 Ubuntu 版本中不可用。"
+        fi
     else
         print_info "bottom 已安装。"
     fi
@@ -334,9 +420,14 @@ install_docker() {
 
     # 安装 Docker
     if ! command -v docker &> /dev/null; then
-        print_info "Docker 未安装，执行安装..."
-        sudo apt-get update || return 1
-        sudo apt-get install -y docker.io || return 1
+        if [ "$OS_TYPE" = "Darwin" ]; then
+            print_warning "macOS 请手动安装 Docker Desktop：https://www.docker.com/products/docker-desktop/"
+            return 0
+        else
+            print_info "Docker 未安装，执行安装..."
+            sudo apt-get update || return 1
+            sudo apt-get install -y docker.io || return 1
+        fi
     else
         print_info "Docker 已安装。"
     fi
@@ -441,6 +532,19 @@ alias tree='eza --tree --icons'
 # fzf 键位绑定和自动补全
 if [ -f ~/.fzf.zsh ]; then
   source ~/.fzf.zsh
+fi
+# Homebrew fzf (macOS)
+if [ -f /opt/homebrew/opt/fzf/shell/key-bindings.zsh ]; then
+  source /opt/homebrew/opt/fzf/shell/key-bindings.zsh
+fi
+if [ -f /opt/homebrew/opt/fzf/shell/completion.zsh ]; then
+  source /opt/homebrew/opt/fzf/shell/completion.zsh
+fi
+if [ -f /usr/local/opt/fzf/shell/key-bindings.zsh ]; then
+  source /usr/local/opt/fzf/shell/key-bindings.zsh
+fi
+if [ -f /usr/local/opt/fzf/shell/completion.zsh ]; then
+  source /usr/local/opt/fzf/shell/completion.zsh
 fi
 
 # fzf 配置选项
@@ -718,7 +822,11 @@ set_default_shell() {
             print_info "将 zsh 添加到 /etc/shells..."
             command -v zsh | sudo tee -a /etc/shells
         fi
-        sudo chsh -s "$(which zsh)" "$USER"
+        if [ "$OS_TYPE" = "Darwin" ]; then
+            chsh -s "$(which zsh)" "$USER"
+        else
+            sudo chsh -s "$(which zsh)" "$USER"
+        fi
     else
         print_info "Zsh 已经是默认 Shell。"
     fi
